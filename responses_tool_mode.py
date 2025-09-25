@@ -1,10 +1,12 @@
 import dataclasses
 import json
 import pathlib
-import subprocess
 import typing
 
 import openai
+
+import defs
+import utils
 
 BASH_TOOL = {
     "type": "function",
@@ -38,14 +40,6 @@ SUMMARY_SYSTEM_PROMPT = (
 class CommandProposal:
     command: str
     timeout_sec: int
-
-
-@dataclasses.dataclass
-class CommandResult:
-    command: str
-    returncode: int
-    stdout: str
-    stderr: str
 
 
 class BashToolCaller:
@@ -91,22 +85,9 @@ class BashToolCaller:
             command=args["command"], timeout_sec=int(args.get("timeout_sec", 120))
         )
 
-    def run_bash(
-        self, command: str, cwd: pathlib.Path, timeout_sec: int = 120
-    ) -> CommandResult:
-        """Executes a bash command and captures its output."""
-        cp = subprocess.run(
-            ["bash", "-lc", command],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-        )
-        return CommandResult(
-            command=command, returncode=cp.returncode, stdout=cp.stdout, stderr=cp.stderr
-        )
-
-    def summarize_result(self, proposal: CommandProposal, result: CommandResult) -> str:
+    def summarize_result(
+        self, proposal: CommandProposal, result: defs.CommandResult
+    ) -> str:
         """Summarizes the outcome of the executed command (no tools used here)."""
         result_json = json.dumps(dataclasses.asdict(result), indent=2)
 
@@ -143,7 +124,7 @@ if __name__ == "__main__":
         proposal = agent.propose_command(task)
         print("=== proposed bash command ===\n", proposal.command)
 
-        result = agent.run_bash(
+        result = utils.run_bash(
             proposal.command, cwd=repo, timeout_sec=proposal.timeout_sec
         )
         print("\n=== stdout ===\n", result.stdout)
