@@ -1,9 +1,11 @@
 import dataclasses
 import json
 import pathlib
-import subprocess
 
 import openai
+
+import defs
+import utils
 
 BASH_TOOL = {
     "type": "function",
@@ -41,16 +43,6 @@ class CommandProposal:
     timeout_sec: int
 
 
-@dataclasses.dataclass
-class CommandResult:
-    """Represents the result of executing a local bash command."""
-
-    command: str
-    returncode: int
-    stdout: str
-    stderr: str
-
-
 class BashToolCaller:
     """A tool caller that uses a bash tool to accomplish tasks."""
 
@@ -60,7 +52,7 @@ class BashToolCaller:
         self.messages = []
 
     def propose_command(self, task: str) -> CommandProposal:
-        """Given a task, proposes a single bash command to accomplish it."""
+        """Given a task, proposes a single bash command to accomplish it, using the OpenAI."""
         self._create_initial_messages(task)
 
         resp = self.client.chat.completions.create(
@@ -84,7 +76,9 @@ class BashToolCaller:
             timeout_sec=int(args.get("timeout_sec", 120)),
         )
 
-    def summarize_result(self, proposal: CommandProposal, result: CommandResult) -> str:
+    def summarize_result(
+        self, proposal: CommandProposal, result: defs.CommandResult
+    ) -> str:
         """Summarizes the outcome of the executed command."""
         self._add_tool_result_to_history(proposal, result)
 
@@ -108,7 +102,7 @@ class BashToolCaller:
         ]
 
     def _add_tool_result_to_history(
-        self, proposal: CommandProposal, result: CommandResult
+        self, proposal: CommandProposal, result: defs.CommandResult
     ):
         """Helper to append the tool execution results to the message history."""
         self.messages.append(
@@ -128,21 +122,6 @@ class BashToolCaller:
         )
 
 
-# --- Standalone Utility Function ---
-def run_bash(command: str, cwd: pathlib.Path, timeout_sec: int = 120) -> CommandResult:
-    """Executes a bash command and captures its output."""
-    cp = subprocess.run(
-        ["bash", "-lc", command],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=timeout_sec,
-    )
-    return CommandResult(
-        command=command, returncode=cp.returncode, stdout=cp.stdout, stderr=cp.stderr
-    )
-
-
 if __name__ == "__main__":
     repo = pathlib.Path("").resolve()
     task = """
@@ -159,7 +138,9 @@ if __name__ == "__main__":
         print("=== proposed bash command ===\n", proposal.command)
 
         # 2. Execute the command
-        result = run_bash(proposal.command, cwd=repo, timeout_sec=proposal.timeout_sec)
+        result = utils.run_bash(
+            proposal.command, cwd=repo, timeout_sec=proposal.timeout_sec
+        )
         print("\n=== stdout ===\n", result.stdout)
         if result.stderr:
             print("=== stderr ===\n", result.stderr)
