@@ -1,8 +1,9 @@
-import json, pathlib, subprocess
+import dataclasses
+import json
+import pathlib
+import subprocess
 
 import openai
-
-client = openai.OpenAI()
 
 BASH_TOOL = {
     "type": "function",
@@ -24,35 +25,112 @@ BASH_TOOL = {
 SYSTEM_PROMPT = """You operate ONLY by calling the `bash` tool exactly once.
 Rules:
 - Return exactly ONE tool call to `bash` (no assistant prose in that message).
-- Target bash 3.2 compatibility: do NOT use `mapfile`. Prefer Python HEREDOCs for 
-  multi-file edits.
+- Prefer Python HEREDOCs for multi-file edits.
 - Within the `python` HEREDOC, you can simply use the command `python` to run code; no 
   need to use `python3`.
+- Do not commit changes using `git`.
 """
 
 
-def _user_prompt(task: str) -> str:
-    return f"Task: {task}\nReturn exactly one bash tool call that accomplishes this."
+@dataclasses.dataclass
+class CommandProposal:
+    """Represents a command proposed by the AI."""
+
+    tool_call_id: str
+    command: str
+    timeout_sec: int
 
 
-def propose_bash_command(task: str, model="gpt-5"):
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": _user_prompt(task)},
-    ]
-    resp = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        tools=[BASH_TOOL],
-        tool_choice={"type": "function", "function": {"name": "bash"}},
-    )
-    msg = resp.choices[0].message
-    call = msg.tool_calls[0]
-    args = json.loads(call.function.arguments or "{}")
-    return messages, msg, call.id, args["command"], int(args.get("timeout_sec", 120))
+@dataclasses.dataclass
+class CommandResult:
+    """Represents the result of executing a local bash command."""
+
+    command: str
+    returncode: int
+    stdout: str
+    stderr: str
 
 
-def run_bash(command: str, cwd: pathlib.Path, timeout_sec: int = 120):
+class BashToolCaller:
+    """A tool caller that uses a bash tool to accomplish tasks."""
+
+    def __init__(self, model: str = "gpt-5"):
+        self.client = openai.OpenAI()
+        self.model = model
+        self.messages = []
+
+    def propose_command(self, task: str) -> CommandProposal:
+        """Given a task, proposes a single bash command to accomplish it."""
+        self._create_initial_messages(task)
+
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=self.messages,
+            tools=[BASH_TOOL],
+            tool_choice={"type": "function", "function": {"name": "bash"}},
+        )
+        assistant_msg = resp.choices[0].message
+        self.messages.append(assistant_msg)
+
+        if not assistant_msg.tool_calls:
+            raise ValueError("The model did not return a tool call.")
+
+        tool_call = assistant_msg.tool_calls[0]
+        args = json.loads(tool_call.function.arguments or "{}")
+
+        return CommandProposal(
+            tool_call_id=tool_call.id,
+            command=args["command"],
+            timeout_sec=int(args.get("timeout_sec", 120)),
+        )
+
+    def summarize_result(self, proposal: CommandProposal, result: CommandResult) -> str:
+        """Summarizes the outcome of the executed command."""
+        self._add_tool_result_to_history(proposal, result)
+
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=self.messages,
+            tools=[BASH_TOOL],
+            tool_choice="none",
+        )
+        return resp.choices[0].message.content
+
+    def _create_initial_messages(self, task: str):
+        """Helper to set up the initial message list for a new task."""
+        self.messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Task: {task}\nReturn exactly one bash tool call that "
+                "accomplishes this.",
+            },
+        ]
+
+    def _add_tool_result_to_history(
+        self, proposal: CommandProposal, result: CommandResult
+    ):
+        """Helper to append the tool execution results to the message history."""
+        self.messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": proposal.tool_call_id,
+                "name": "bash",
+                "content": json.dumps(dataclasses.asdict(result)),
+            }
+        )
+        self.messages.append(
+            {
+                "role": "user",
+                "content": "Based on the tool result, provide a brief summary of what "
+                "was done, including any changes made.",
+            }
+        )
+
+
+# --- Standalone Utility Function ---
+def run_bash(command: str, cwd: pathlib.Path, timeout_sec: int = 120) -> CommandResult:
+    """Executes a bash command and captures its output."""
     cp = subprocess.run(
         ["bash", "-lc", command],
         cwd=str(cwd),
@@ -60,44 +138,9 @@ def run_bash(command: str, cwd: pathlib.Path, timeout_sec: int = 120):
         text=True,
         timeout=timeout_sec,
     )
-    return {
-        "command": command,
-        "returncode": cp.returncode,
-        "stdout": cp.stdout,
-        "stderr": cp.stderr,
-    }
-
-
-def finalize_with_observation(
-    messages, assistant_msg, tool_call_id, tool_result, model="gpt-5"
-):
-    messages = list(messages)
-    messages.append(
-        {
-            "role": "assistant",
-            "content": assistant_msg.content or "",
-            "tool_calls": assistant_msg.tool_calls,
-        }
+    return CommandResult(
+        command=command, returncode=cp.returncode, stdout=cp.stdout, stderr=cp.stderr
     )
-    messages.append(
-        {
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "name": "bash",
-            "content": json.dumps(tool_result),
-        }
-    )
-    messages.append(
-        {
-            "role": "user",
-            "content": "Based on the tool result, provide a brief summary of what was "
-            "done, including any changes made.",
-        }
-    )
-    resp = client.chat.completions.create(
-        model=model, messages=messages, tools=[BASH_TOOL], tool_choice="none"
-    )
-    return resp.choices[0].message.content
 
 
 if __name__ == "__main__":
@@ -108,13 +151,29 @@ if __name__ == "__main__":
         you replace in all user-facing places in the repo that that name could appear.
         """
 
-    messages, assistant_msg, call_id, command, tmo = propose_bash_command(task)
-    print("\n=== proposed bash command ===\n", command)
-    result = run_bash(command, cwd=repo, timeout_sec=tmo)
+    agent = BashToolCaller(model="gpt-5")
 
-    print("=== stdout ===\n", result["stdout"])
-    print("=== stderr ===\n", result["stderr"])
-    print("=== rc ===", result["returncode"])
+    try:
+        # 1. Propose a command
+        proposal = agent.propose_command(task)
+        print("=== proposed bash command ===\n", proposal.command)
 
-    final = finalize_with_observation(messages, assistant_msg, call_id, result)
-    print("\n=== final explanation ===\n", final)
+        # 2. Execute the command
+        result = run_bash(proposal.command, cwd=repo, timeout_sec=proposal.timeout_sec)
+        print("\n=== stdout ===\n", result.stdout)
+        if result.stderr:
+            print("=== stderr ===\n", result.stderr)
+        print("=== rc ===", result.returncode)
+
+        # 3. Summarize the result
+        if result.returncode == 0:
+            summary = agent.summarize_result(proposal, result)
+            print("\n=== final explanation ===\n", summary)
+        else:
+            print(
+                "\n=== final explanation ===\n",
+                "The command failed to execute, so no summary was generated.",
+            )
+
+    except Exception as e:
+        print(f"\nAn error occurred: {e}")
