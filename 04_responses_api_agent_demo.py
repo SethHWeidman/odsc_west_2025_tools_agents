@@ -1,9 +1,9 @@
 import dataclasses
 import json
+import pathlib
 import typing
 import openai
 
-import defs
 import utils
 
 
@@ -35,6 +35,8 @@ BASH_TOOL = {
     },
 }
 
+REPO = pathlib.Path("").resolve()
+
 
 @dataclasses.dataclass
 class Proposal:
@@ -53,15 +55,34 @@ class BashAgent:
       disabled).
     """
 
-    def __init__(self, model: str = "gpt-5", max_steps: int = 20, confirm: bool = False):
+    def __init__(
+        self,
+        model: str = "gpt-5",
+        max_steps: int = 20,
+        confirm: bool = False,
+        verbose: bool = True,
+        clip: int = 400,
+    ):
         self.client = openai.OpenAI()
         self.model = model
         self.max_steps = max_steps
         self.confirm = confirm
-        self.response_id: typing.Optional[str] = None  # conversation state
+        self.response_id: typing.Optional[str] = None
         self.last_call_id: typing.Optional[str] = None
+        self.verbose = verbose
+        self.clip = clip
+        self.step_count = 0
+        self.tool_calls = 0
 
     # --- model IO helpers ----------------------------------------------------
+
+    def _log(self, *args, **kwargs):
+        if self.verbose:
+            print(*args, **kwargs)
+
+    def _clip(self, s: typing.Optional[str]) -> str:
+        s = "" if s is None else (s if isinstance(s, str) else str(s))
+        return s if len(s) <= self.clip else s[: self.clip] + "…"
 
     def _first_or_next(self, input_items, expose_tools: bool = True) -> typing.Any:
         """Call Responses API, continuing the same server-side conversation."""
@@ -73,8 +94,6 @@ class BashAgent:
 
         if expose_tools:
             kwargs["tools"] = [BASH_TOOL]
-            # Let the model choose the next step; you can force the function if desired:
-            # kwargs["tool_choice"] = {"type": "function", "name": "bash"}
         else:
             kwargs["tools"] = []
             kwargs["tool_choice"] = "none"
@@ -117,6 +136,7 @@ class BashAgent:
         """
 
         # Seed the conversation (tools enabled)
+        self._log("▶️  Task:", task.strip())
         resp = self._first_or_next(
             [
                 {"role": "system", "content": AGENT_SYSTEM_PROMPT},
@@ -124,10 +144,16 @@ class BashAgent:
             ]
         )
         for step in range(1, self.max_steps + 1):
+            self.step_count = step
             proposal = self._extract_single_function_call(resp)
 
             # DONE: the model did not request a tool call this turn
             if proposal is None:
+                last_text = getattr(resp, "output_text", "") or ""
+                self._log(
+                    f"✅ Done signal at step {step}: model returned no tool call.\n"
+                    f"   Last assistant text (clipped):\n{self._clip(last_text)}"
+                )
                 break
 
             # Optional human-in-the-loop
@@ -141,7 +167,17 @@ class BashAgent:
                     continue
 
             # Execute locally
-            result = utils.run_bash(proposal.command, timeout_sec=proposal.timeout_sec)
+            self.tool_calls += 1
+            self._log(f"\n🔧 Step {step}: bash → {proposal.command}")
+            result = utils.run_bash(
+                proposal.command, cwd=REPO, timeout_sec=proposal.timeout_sec
+            )
+
+            self._log(f"   rc={result.returncode}")
+            if result.stdout:
+                self._log("   stdout:\n", self._clip(result.stdout))
+            if result.stderr:
+                self._log("   stderr:\n", self._clip(result.stderr))
 
             # Send observation back into the SAME Responses thread; keep tools enabled
             tool_output_item = {
@@ -156,6 +192,10 @@ class BashAgent:
             return "Stopped: step limit reached."
 
         # Final: ask for a concise summary (tools disabled)
+        self._log(
+            f"\nℹ️  Totals → steps: {self.step_count}, tool calls executed: "
+            f"{self.tool_calls}"
+        )
         summary = self._first_or_next(
             [
                 {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
@@ -171,7 +211,7 @@ class BashAgent:
 
 
 if __name__ == "__main__":
-    bash_agent = BashAgent()
+    bash_agent = BashAgent(verbose=True)
 
     task = """
         I'm interested in changing the name of this app to "GPT-Tree" from "GPTree". Any 
@@ -181,3 +221,4 @@ if __name__ == "__main__":
 
     summary = bash_agent.run(task=task)
     print("\n=== final summary ===\n", summary)
+    print(f"\n(stats) steps={bash_agent.step_count}, tool_calls={bash_agent.tool_calls}")
