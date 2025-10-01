@@ -53,6 +53,7 @@ class BashAgent:
                  then continue with previous_response_id=..., still exposing the tool.
     - Finish: when done_check(...) returns True, request a final summary (tools
       disabled).
+    - Verbose runs log console output to a file (`agent_log.txt` by default).
     """
 
     def __init__(
@@ -62,6 +63,7 @@ class BashAgent:
         confirm: bool = False,
         verbose: bool = True,
         clip: int = 400,
+        log_file: typing.Optional[str] = "agent_log.txt",
     ):
         self.client = openai.OpenAI()
         self.model = model
@@ -73,12 +75,32 @@ class BashAgent:
         self.clip = clip
         self.step_count = 0
         self.tool_calls = 0
+        if log_file is None:
+            self.log_file = None
+        else:
+            log_path = pathlib.Path(log_file)
+            if not log_path.is_absolute():
+                log_path = REPO / log_path
+            self.log_file = log_path
 
     # --- model IO helpers ----------------------------------------------------
 
     def _log(self, *args, **kwargs):
-        if self.verbose:
-            print(*args, **kwargs)
+        if not self.verbose:
+            return
+
+        print(*args, **kwargs)
+        if not self.log_file:
+            return
+
+        # Mirror console output into a simple agent log.
+        sep = kwargs.get('sep', ' ')
+        end = kwargs.get('end', '\n')
+        text = sep.join(str(arg) for arg in args) + end
+        with self.log_file.open('a', encoding='utf-8') as log_file:
+            log_file.write(text)
+            if kwargs.get('flush'):
+                log_file.flush()
 
     def _clip(self, s: typing.Optional[str]) -> str:
         s = "" if s is None else (s if isinstance(s, str) else str(s))
