@@ -39,7 +39,7 @@ REPO = pathlib.Path("").resolve()
 
 
 @dataclasses.dataclass
-class Proposal:
+class BashProposal:
     command: str
     timeout_sec: int
     call_id: str
@@ -106,12 +106,14 @@ class BashAgent:
         s = "" if s is None else (s if isinstance(s, str) else str(s))
         return s if len(s) <= self.clip else s[: self.clip] + "…"
 
-    def _first_or_next(self, input_items, expose_tools: bool = True) -> typing.Any:
+    def _send_to_model(self, input_items, expose_tools: bool = True) -> typing.Any:
         """Call Responses API, continuing the same server-side conversation."""
         kwargs = dict(model=self.model, input=input_items)
         if self.response_id:
+            # Continue the same server-side thread on subsequent calls.
             kwargs["previous_response_id"] = self.response_id
         else:
+            # First request: ask the API to store the thread so we can resume.
             kwargs["store"] = True
 
         if expose_tools:
@@ -125,7 +127,7 @@ class BashAgent:
         return resp
 
     @staticmethod
-    def _extract_single_function_call(resp) -> Proposal | None:
+    def _extract_single_function_call(resp) -> BashProposal | None:
         """Return the single bash call if present; otherwise None (model emitted
         text)."""
 
@@ -140,7 +142,7 @@ class BashAgent:
         if not call_id:
             raise ValueError("Missing call_id on function_call item")
 
-        return Proposal(
+        return BashProposal(
             command=args["command"],
             timeout_sec=int(args.get("timeout_sec", 120)),
             call_id=call_id,
@@ -159,7 +161,7 @@ class BashAgent:
 
         # Seed the conversation (tools enabled)
         self._log("▶️  Task:", task.strip())
-        resp = self._first_or_next(
+        resp = self._send_to_model(
             [
                 {"role": "system", "content": AGENT_SYSTEM_PROMPT},
                 {"role": "user", "content": task.strip()},
@@ -167,10 +169,10 @@ class BashAgent:
         )
         for step in range(1, self.max_steps + 1):
             self.step_count = step
-            proposal = self._extract_single_function_call(resp)
+            bash_proposal = self._extract_single_function_call(resp)
 
             # DONE: the model did not request a tool call this turn
-            if proposal is None:
+            if bash_proposal is None:
                 last_text = getattr(resp, "output_text", "") or ""
                 self._log(
                     f"✅ Done signal at step {step}: model returned no tool call.\n"
@@ -180,19 +182,19 @@ class BashAgent:
 
             # Optional human-in-the-loop
             if self.confirm:
-                print(f"\n[step {step}] propose:\n{proposal.command}")
+                print(f"\n[step {step}] propose:\n{bash_proposal.command}")
                 if input("Execute? [Y/n] ").strip().lower() == "n":
                     # Feed brief guidance and let the model try again with tools
-                    resp = self._first_or_next(
+                    resp = self._send_to_model(
                         [{"role": "user", "content": "Declined. Try another approach."}]
                     )
                     continue
 
             # Execute locally
             self.tool_calls += 1
-            self._log(f"\n🔧 Step {step}: bash → {proposal.command}")
+            self._log(f"\n🔧 Step {step}: bash → {bash_proposal.command}")
             result = utils.run_bash(
-                proposal.command, cwd=REPO, timeout_sec=proposal.timeout_sec
+                bash_proposal.command, cwd=REPO, timeout_sec=bash_proposal.timeout_sec
             )
 
             self._log(f"   rc={result.returncode}")
@@ -204,10 +206,10 @@ class BashAgent:
             # Send observation back into the SAME Responses thread; keep tools enabled
             tool_output_item = {
                 "type": "function_call_output",
-                "call_id": proposal.call_id,  # must match function_call.call_id
+                "call_id": bash_proposal.call_id,  # must match function_call.call_id
                 "output": json.dumps(dataclasses.asdict(result)),
             }
-            resp = self._first_or_next([tool_output_item])
+            resp = self._send_to_model([tool_output_item])
 
         else:
             # Hit step limit without ever seeing a non-tool reply
@@ -218,7 +220,7 @@ class BashAgent:
             f"\nℹ️  Totals → steps: {self.step_count}, tool calls executed: "
             f"{self.tool_calls}"
         )
-        summary = self._first_or_next(
+        summary = self._send_to_model(
             [
                 {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
                 {
@@ -233,7 +235,7 @@ class BashAgent:
 
 
 if __name__ == "__main__":
-    bash_agent = BashAgent(verbose=True)
+    bash_agent = BashAgent(verbose=True, confirm=True)
 
     task = """
         I'm interested in changing the name of this app to "GPT-Tree" from "GPTree". Any 
