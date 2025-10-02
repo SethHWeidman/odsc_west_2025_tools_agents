@@ -22,14 +22,13 @@ I'm hungry and I want some fruit. Please help me figure out how much it will
 cost...possibly using the tools I've given you!
 """
 
-conversation_messages = assemble_initial_conversation_messages(SYSTEM_PROMPT, TASK)
+initial_conversation_messages = assemble_initial_conversation_messages(
+    SYSTEM_PROMPT, TASK
+)
 
 response = call_model_with_tools(
-    "gpt-5",
-    input=[
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": TASK},
-    ],
+    model="gpt-5",
+    input=initial_conversation_messages,
     tools=TOOLS,
     # with OpenAI's APIs, we could optionally *require* the model to call tools; we will
     # do this shortly
@@ -76,7 +75,15 @@ tool_call = {
 
 tool_call_result = tool_call_runner(tool_call)
 
-response = summarize_final_result(
-    model="gpt-5", input=[conversation_messages, tool_call, tool_call_result]
+summary = summarize_final_result(
+    model="gpt-5",
+    previous_response_id=resp.id,
+    input=tool_call_result
+    + {
+        "role": "user",
+        "content": "Can you please summarize the results of the tool call you just "
+        "made? What changed in the repo?",
+    },
 )
+print(summary)
 ```
