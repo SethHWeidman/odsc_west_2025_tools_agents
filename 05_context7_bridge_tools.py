@@ -32,8 +32,8 @@ def _sanitize_function_name(name: str, prefix: str = SERVER_LABEL) -> str:
 
 def _normalize_schema(s: dict[str, typing.Any]) -> dict[str, typing.Any]:
     """
-    Normalize the MCP tool's inputSchema to a safe JSON Schema for
-    OpenAI function 'parameters'. We:
+    Normalize the MCP tool's inputSchema to a safe JSON Schema for OpenAI function
+    'parameters'. We:
       • deep-copy
       • drop '$schema' (noise)
       • ensure 'type' and 'properties' for object schemas
