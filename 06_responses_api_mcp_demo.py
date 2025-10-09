@@ -24,95 +24,13 @@ SUMMARY_SYSTEM_PROMPT = "Summarize the overall results for the user."
 
 # -------------------- Tools ---------------------------------------------------
 
-CONTEXT7_MCP_TOOLS = [
-    {
-        "type": "function",
-        "name": "context7__resolve_library_id",
-        "description": """Resolves a package/product name to a Context7-compatible 
-        library ID and returns a list of matching libraries.
-
-        You MUST call this function before 'get-library-docs' to obtain a valid 
-        Context7-compatible library ID UNLESS the user explicitly provides a library ID 
-        in the format '/org/project' or '/org/project/version' in their query.
-        
-        Selection Process:
-        1. Analyze the query to understand what library/package the user is looking for
-        2. Return the most relevant match based on:
-          - Name similarity to the query (exact matches prioritized)
-          - Description relevance to the query's intent
-          - Documentation coverage (prioritize libraries with higher Code Snippet counts)
-          - Trust score (consider libraries with scores of 7-10 more authoritative)
-        
-        Response Format:
-          - Return the selected library ID in a clearly marked section
-          - Provide a brief explanation for why this library was chosen
-          - If multiple good matches exist, acknowledge this but proceed with the most 
-            relevant one
-          - If no good matches exist, clearly state this and suggest query refinements
-        
-        For ambiguous queries, request clarification before proceeding with a best-guess 
-        match.""",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "libraryName": {
-                    "type": "string",
-                    "description": "Library name to search for and retrieve a "
-                    "Context7-compatible library ID.",
-                }
-            },
-            "required": ["libraryName"],
-            "additionalProperties": False,
-        },
-    },
-    {
-        "type": "function",
-        "name": "context7__get_library_docs",
-        "description": "Fetches up-to-date documentation for a library. You must call "
-        "'resolve-library-id' first to obtain the exact Context7-compatible library ID "
-        "required to use this tool, UNLESS the user explicitly provides a library ID in "
-        "the format '/org/project' or '/org/project/version' in their query.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "context7CompatibleLibraryID": {
-                    "type": "string",
-                    "description": "Exact Context7-compatible library ID (e.g., "
-                    "'/mongodb/docs', '/vercel/next.js', '/supabase/supabase', "
-                    "'/vercel/next.js/v14.3.0-canary.87') retrieved from "
-                    "'resolve-library-id' or directly from user query in the format "
-                    "'/org/project' or '/org/project/version'.",
-                },
-                "topic": {
-                    "type": "string",
-                    "description": "Topic to focus documentation on (e.g., 'hooks', "
-                    "'routing').",
-                },
-                "tokens": {
-                    "type": "number",
-                    "description": "Maximum number of tokens of documentation to "
-                    "retrieve (default: 5000). Higher values provide more context but "
-                    "consume more tokens.",
-                },
-            },
-            "required": ["context7CompatibleLibraryID"],
-            "additionalProperties": False,
-        },
-    },
-]
+with open("context7_function_tools.responses.json", "r") as f:
+    CONTEXT7_MCP_TOOLS = json.load(f)
 
 # -------------------- reverse index (function -> MCP) -------------------------
 
-REVERSE_INDEX = {
-    "context7__resolve_library_id": {
-        "server_label": "context7",
-        "mcp_name": "resolve-library-id",
-    },
-    "context7__get_library_docs": {
-        "server_label": "context7",
-        "mcp_name": "get-library-docs",
-    },
-}
+with open("context7_reverse_index.json", "r") as f:
+    REVERSE_INDEX = json.load(f)
 
 
 REPO = pathlib.Path("").resolve()  # kept for parity with your other scripts

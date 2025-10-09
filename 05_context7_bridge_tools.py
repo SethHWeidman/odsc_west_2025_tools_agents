@@ -92,7 +92,6 @@ def bridge_mcp_tools_to_function_tools(
                 "name": fn_name,
                 "description": desc or name,
                 "parameters": parameters,
-                "strict": True,
             }
         )
         reverse_index[fn_name] = {"server_label": server_label, "mcp_name": name}
