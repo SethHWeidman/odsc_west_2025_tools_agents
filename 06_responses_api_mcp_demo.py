@@ -254,7 +254,7 @@ class DocsAgent:
                     self.tool_calls += 1
                     fn_name = c["name"]
 
-                    # Parse function arguments (often JSON string)
+                    # Parse function arguments
                     try:
                         args_obj = (
                             json.loads(c["arguments"])
