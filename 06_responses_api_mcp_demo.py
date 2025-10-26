@@ -33,7 +33,7 @@ with open("context7_reverse_index.json", "r") as f:
     REVERSE_INDEX = json.load(f)
 
 
-REPO = pathlib.Path("").resolve()  # kept for parity with your other scripts
+REPO = pathlib.Path("").resolve()
 
 
 # -------------------- Context7 MCP dispatcher ---------------------------------
