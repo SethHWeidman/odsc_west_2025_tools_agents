@@ -279,8 +279,8 @@ class DocsAgent:
                     outputs.append(
                         {
                             "type": "function_call_output",
-                            "call_id": c["id"],  # MUST match the model's call_id
-                            "output": tool_output_text,  # MUST be a string
+                            "call_id": c["id"],  # matches the model's call_id
+                            "output": tool_output_text,  # must be a string
                         }
                     )
 
