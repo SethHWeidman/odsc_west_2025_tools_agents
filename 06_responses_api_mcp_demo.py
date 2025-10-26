@@ -54,6 +54,46 @@ class Context7Dispatcher:
         if self.verbose:
             print(*args)
 
+    def _flatten_mcp_tool_result(self, result: typing.Any) -> str:
+        """
+        Flatten an MCP tool call result into a single printable string.
+
+        Input
+        -----
+        result: Any
+            The object returned by `session.call_tool(...)`. It typically has a
+            `.content` attribute that is an iterable of content parts. Each part may
+            expose one of the following attributes:
+              - `text`: a plain string segment
+              - `json` or `data`: a JSON-serializable Python object
+              - otherwise: any object, which will be converted with `str(...)`
+
+        Output
+        ------
+        str
+            A single string formed by joining all recognized parts with newlines.
+            JSON/data objects are serialized with `json.dumps(..., ensure_ascii=False,
+            indent=2)` when possible; if serialization fails, `str(obj)` is used. If no
+            recognizable content exists, returns an empty string.
+        """
+        parts: list[str] = []
+        for c in getattr(result, "content", []) or []:
+            # Handle common MCP content kinds: text, json, blob
+            text = getattr(c, "text", None)
+            if text is not None:
+                parts.append(text)
+                continue
+            obj = getattr(c, "json", None) or getattr(c, "data", None)
+            if obj is not None:
+                try:
+                    parts.append(json.dumps(obj, ensure_ascii=False, indent=2))
+                except Exception:
+                    parts.append(str(obj))
+                continue
+            # Fallback representation
+            parts.append(str(c))
+        return "\n".join(p for p in parts if p is not None)
+
     async def _acall(self, mcp_tool_name: str, arguments: dict | None) -> str:
         stdio_params = mcp.StdioServerParameters(
             command="npx",
@@ -63,32 +103,15 @@ class Context7Dispatcher:
             async with mcp.ClientSession(reader, writer) as session:
                 await session.initialize()
                 self._vlog(
-                    f"   [dispatcher] calling MCP tool: {mcp_tool_name} f"
+                    f"   [dispatcher] calling MCP tool: {mcp_tool_name} "
                     f"args={arguments or {}}"
                 )
                 result = await session.call_tool(mcp_tool_name, arguments or {})
-                # Flatten result content to a single string
-                parts = []
-                for c in getattr(result, "content", []) or []:
-                    # Common MCP content kinds: text, json, blob
-                    text = getattr(c, "text", None)
-                    if text is not None:
-                        parts.append(text)
-                        continue
-                    obj = getattr(c, "json", None) or getattr(c, "data", None)
-                    if obj is not None:
-                        try:
-                            parts.append(json.dumps(obj, ensure_ascii=False, indent=2))
-                        except Exception:
-                            parts.append(str(obj))
-                        continue
-                    # Fallback representation
-                    parts.append(str(c))
-                out = "\n".join(p for p in parts if p is not None)
+                out = self._flatten_mcp_tool_result(result)
                 return out or ""
 
     def call(self, mcp_tool_name: str, arguments: dict | None) -> str:
-        # Run the async call in a fresh loop (fine for CLI scripts)
+        # Run in a new event loop. In async contexts, await `_acall` directly.
         return asyncio.run(self._acall(mcp_tool_name, arguments))
 
 
