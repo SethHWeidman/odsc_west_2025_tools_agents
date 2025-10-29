@@ -125,7 +125,7 @@ async def main():
     print("\n--- OpenAI function tools for RESPONSES (flattened) ---")
     print(json.dumps(function_tools, indent=2, ensure_ascii=False))
 
-    # Optional: persist for reuse
+    # Persist for reuse (required by other scripts)
     with open("context7_function_tools.responses.json", "w", encoding="utf-8") as f:
         json.dump(function_tools, f, indent=2, ensure_ascii=False)
 

@@ -34,15 +34,6 @@ Rules:
 """
 
 
-@dataclasses.dataclass
-class CommandProposal:
-    """Represents a command proposed by the AI."""
-
-    tool_call_id: str
-    command: str
-    timeout_sec: int
-
-
 class BashToolCaller:
     """A tool caller that uses a bash tool to accomplish tasks."""
 
@@ -51,7 +42,7 @@ class BashToolCaller:
         self.model = model
         self.messages = []
 
-    def propose_command(self, task: str) -> CommandProposal:
+    def propose_command(self, task: str) -> defs.CommandProposal:
         """Given a task, proposes a single bash command to accomplish it, using the OpenAI."""
         self._create_initial_messages(task)
 
@@ -70,14 +61,14 @@ class BashToolCaller:
         tool_call = assistant_msg.tool_calls[0]
         args = json.loads(tool_call.function.arguments or "{}")
 
-        return CommandProposal(
-            tool_call_id=tool_call.id,
+        return defs.CommandProposal(
             command=args["command"],
             timeout_sec=int(args.get("timeout_sec", 120)),
+            tool_call_id=tool_call.id,
         )
 
     def summarize_result(
-        self, proposal: CommandProposal, result: defs.CommandResult
+        self, proposal: defs.CommandProposal, result: defs.CommandResult
     ) -> str:
         """Summarizes the outcome of the executed command."""
         self._add_tool_result_to_history(proposal, result)
@@ -102,7 +93,7 @@ class BashToolCaller:
         ]
 
     def _add_tool_result_to_history(
-        self, proposal: CommandProposal, result: defs.CommandResult
+        self, proposal: defs.CommandProposal, result: defs.CommandResult
     ):
         """Helper to append the tool execution results to the message history."""
         self.messages.append(

@@ -37,12 +37,6 @@ SUMMARY_SYSTEM_PROMPT = (
 )
 
 
-@dataclasses.dataclass
-class CommandProposal:
-    command: str
-    timeout_sec: int
-
-
 class BashToolCaller:
     """Stateful tool calling with the Responses API.
 
@@ -50,7 +44,8 @@ class BashToolCaller:
       1) responses.create(..., tools=[...], tool_choice=..., store=True)
       2) Extract function call (id + arguments), run the local tool
       3) responses.create(previous_response_id=..., input=[
-             { "type": "function_call_output", "call_id": <func_call_id>, "output": "<JSON string>" },
+             { "type": "function_call_output", "call_id": <func_call_id>, "output":
+             "<JSON string>" },
              { "role": "system", "content": SUMMARY_SYSTEM_PROMPT },
              { "role": "user", "content": "Please summarize ..." }
          ], tools=[], tool_choice="none")
@@ -63,7 +58,7 @@ class BashToolCaller:
         self._first_response_id: typing.Optional[str] = None
         self._last_tool_call_id: typing.Optional[str] = None
 
-    def propose_command(self, task: str) -> CommandProposal:
+    def propose_command(self, task: str) -> defs.CommandProposal:
         """Ask the model for exactly one bash function call and remember state."""
         self.task = task.strip()
 
@@ -95,7 +90,7 @@ class BashToolCaller:
         # remember for function_call_output
         self._last_tool_call_id = func_item.call_id
 
-        return CommandProposal(
+        return defs.CommandProposal(
             command=args["command"], timeout_sec=int(args.get("timeout_sec", 120))
         )
 

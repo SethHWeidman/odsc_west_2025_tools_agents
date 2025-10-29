@@ -36,12 +36,6 @@ SUMMARY_SYSTEM_PROMPT = (
 )
 
 
-@dataclasses.dataclass
-class CommandProposal:
-    command: str
-    timeout_sec: int
-
-
 class BashToolCaller:
     """A tool caller that uses a bash tool to accomplish tasks, using the OpenAI
     Responses API)."""
@@ -51,7 +45,7 @@ class BashToolCaller:
         self.model = model
         self.task: typing.Optional[str] = None
 
-    def propose_command(self, task: str) -> CommandProposal:
+    def propose_command(self, task: str) -> defs.CommandProposal:
         """Given a task, proposes a single bash command to accomplish it."""
         self.task = task.strip()
 
@@ -81,12 +75,12 @@ class BashToolCaller:
         )
         args = json.loads(func_item.arguments)
 
-        return CommandProposal(
+        return defs.CommandProposal(
             command=args["command"], timeout_sec=int(args.get("timeout_sec", 120))
         )
 
     def summarize_result(
-        self, proposal: CommandProposal, result: defs.CommandResult
+        self, proposal: defs.CommandProposal, result: defs.CommandResult
     ) -> str:
         """Summarizes the outcome of the executed command (no tools used here)."""
         result_json = json.dumps(dataclasses.asdict(result), indent=2)
