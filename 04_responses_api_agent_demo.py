@@ -237,7 +237,13 @@ class BashAgent:
 if __name__ == "__main__":
     bash_agent = BashAgent(verbose=True, confirm=True)
 
-    task = """
+    simple_task = """
+        I'm interested in changing the name of this app to "GPT-Tree" from "GPTree". Any 
+        chance you could try making that change in all necessary files? Please make sure
+        you replace in all user-facing places in the repo that that name could appear.
+        """
+
+    complex_task = """
         When the user clicks "Log out", please pop up a modal similar to the login
         screen that asks: "Are you sure you want to log out?" with "Log out" and
         "cancel" buttons. If the user confirms, log them out and redirect to the home
@@ -247,6 +253,6 @@ if __name__ == "__main__":
         `git add`ed.
         """
 
-    summary = bash_agent.run(task=task)
+    summary = bash_agent.run(task=simple_task)
     print("\n=== final summary ===\n", summary)
     print(f"\n(stats) steps={bash_agent.step_count}, tool_calls={bash_agent.tool_calls}")
