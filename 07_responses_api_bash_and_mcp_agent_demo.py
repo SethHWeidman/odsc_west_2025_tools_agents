@@ -197,6 +197,7 @@ class BashAndMcpAgent:
     def _send_to_model(self, input_items, expose_tools: bool = True):
         """Call Responses API, continuing the same server-side conversation."""
         kwargs = dict(model=self.model, input=input_items)
+        # needed to add high reasoning effort to get the demo to work
         kwargs["reasoning"] = {"effort": 'high'}
         if self.response_id:
             kwargs["previous_response_id"] = self.response_id
