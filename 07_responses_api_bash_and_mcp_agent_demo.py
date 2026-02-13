@@ -1,5 +1,6 @@
 import asyncio
 import dataclasses
+from datetime import datetime
 import json
 from os import environ
 import pathlib
@@ -144,7 +145,7 @@ class BashAndMcpAgent:
 
     def __init__(
         self,
-        model: str = "gpt-5",
+        model: str = "gpt-5.2",
         max_steps: int = 20,
         confirm: bool = False,
         verbose: bool = True,
@@ -379,9 +380,9 @@ class BashAndMcpAgent:
 # -------------------- Demo ----------------------------------------------------
 
 if __name__ == "__main__":
-    agent = BashAndMcpAgent(
-        verbose=True, confirm=False, log_file="agent_multi_tools_log.txt", max_steps=50
-    )
+    timestamp = datetime.now().strftime("%y%m%d-%H%M%S")
+    log_file = f"{timestamp}_agent_multi_tools_log.txt"
+    agent = BashAndMcpAgent(verbose=True, confirm=False, log_file=log_file, max_steps=50)
 
     TASK = (
         """

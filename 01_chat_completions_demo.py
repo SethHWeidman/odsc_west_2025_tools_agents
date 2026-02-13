@@ -118,10 +118,11 @@ if __name__ == "__main__":
     task = """
         I'm interested in changing the name of this app to "GPT-Tree" from "GPTree". Any 
         chance you could try making that change in all necessary files? Please make sure
-        you replace in all user-facing places in the repo that that name could appear.
+        to only change it in places where a user would see the text of the old name 
+        appear.
         """
 
-    agent = BashToolCaller(model="gpt-5")
+    agent = BashToolCaller(model="gpt-5.2")
 
     try:
         # 1. Propose a command
