@@ -388,12 +388,17 @@ if __name__ == "__main__":
         Please update the backend of this project to use FastAPI instead of Flask. Do 
         your work on an appropriately-named branch. Please ensure you review the 
         \"latest and greatest\" FastAPI docs. The goal is that, after your code changes, 
-        I should be able to run `./start_local_gpt.sh` and it should "just work". 
+        I should be able to run `./start-local-gpt.sh` and it should "just work". 
 
-        Couple more important things: 
+        Few more important things: 
 
-        1. You are on a system that does not have an `applypatch` command. 
-        2. Please ignore any files in the repo that have  not been  `git add`ed - do 
+        1. Do not try too hard to test your changes; just tell me when you think you've 
+           finished refactoring the back end and think it will work.
+        2. Any files that are not under version control can be ignored; they do not 
+           contribute to the app's functionality.
+        3. Do not feel the need to `git add` or `git commit` files at the end.
+        4. You are on a system that does not have an `applypatch` command. 
+        5. Please ignore any files in the repo that have  not been  `git add`ed - do 
            not delete them.
         """
     ).strip()
